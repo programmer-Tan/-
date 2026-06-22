@@ -1,0 +1,525 @@
+import type {
+  AdminProfile,
+  AdminOverview,
+  AnswerResult,
+  FeedbackValue,
+  HistoryRecord,
+  ModelConfig,
+  QuestionCategory,
+  SampleScene,
+  SafetyRule,
+  SubmitQuestionPayload,
+  SystemSetting,
+  SystemLog,
+  UserProfile,
+  WorkbenchData
+} from '@/types';
+
+const now = Date.now();
+
+export const sampleScenes: SampleScene[] = [
+  {
+    id: 'scene-medicine',
+    title: '药盒标签识别',
+    description: '适合演示 OCR + 风险提示 + 语音播报。',
+    hint: '画面偏暗，但主体完整，适合回答药品名称和注意事项。',
+    imageLabel: '感冒药盒',
+    recommendedQuestion: '这是什么药？标签上写了什么？',
+    category: 'ocr',
+    diagnostics: {
+      blurScore: 0.82,
+      exposure: 'dim',
+      completeness: 'good',
+      recommendation: '建议提高亮度后再次拍摄，可进一步提升标签文字清晰度。',
+      tags: ['药品包装', '文字区域明显', '健康场景']
+    }
+  },
+  {
+    id: 'scene-bottle',
+    title: '日用品使用建议',
+    description: '模拟对生活用品进行识别与使用说明。',
+    hint: '主体靠左，边缘略裁切，但可完成物品类型判断。',
+    imageLabel: '喷雾瓶',
+    recommendedQuestion: '这是什么物品？怎么使用？',
+    category: 'usage',
+    diagnostics: {
+      blurScore: 0.76,
+      exposure: 'normal',
+      completeness: 'partial',
+      recommendation: '建议将瓶身居中拍摄，便于读取更多文字信息。',
+      tags: ['家居用品', '主体偏移', '可生成建议']
+    }
+  },
+  {
+    id: 'scene-kitchen',
+    title: '厨房场景描述',
+    description: '更适合场景描述、物体计数和安全提示。',
+    hint: '整体清晰，适合多目标识别和区域高亮。',
+    imageLabel: '厨房台面',
+    recommendedQuestion: '台面上有什么？有危险物品吗？',
+    category: 'scene',
+    diagnostics: {
+      blurScore: 0.91,
+      exposure: 'normal',
+      completeness: 'good',
+      recommendation: '图像质量较高，可直接进行多轮问答。',
+      tags: ['多目标场景', '操作台', '安全提醒']
+    }
+  }
+];
+
+function buildAnswer(
+  overrides: Partial<AnswerResult> & Pick<AnswerResult, 'title' | 'answerText' | 'conciseAnswer'>
+): AnswerResult {
+  return {
+    id: `ans-${Math.random().toString(36).slice(2, 8)}`,
+    confidence: 0.88,
+    category: 'scene',
+    riskLevel: 'low',
+    riskNotice: '结果仅供参考，请结合实际场景再次确认。',
+    spokenText: overrides.conciseAnswer,
+    followUps: ['可以再问“标签上还有哪些字？”', '可以继续追问“是否需要重新拍摄？”'],
+    evidence: [
+      {
+        label: '主体轮廓',
+        confidence: 0.91,
+        reason: '模型聚焦到图像中心区域的主要物体。'
+      },
+      {
+        label: '文字区域',
+        confidence: 0.79,
+        reason: '检测到高密度文本块，适合结合 OCR 提示。'
+      }
+    ],
+    citations: ['图像整体清晰度评估', '多模态语义匹配', '风险规则库'],
+    processingMs: 1380,
+    ...overrides
+  };
+}
+
+export const historyRecords: HistoryRecord[] = [
+  {
+    id: 'rec-101',
+    createdAt: new Date(now - 1000 * 60 * 12).toISOString(),
+    imageLabel: '感冒药盒',
+    imageHint: '药盒正面，灯光偏暗',
+    question: '这是什么药？标签上写了什么？',
+    inputMode: 'voice',
+    transcript: '这是什么药，标签上写了什么',
+    category: 'ocr',
+    status: 'unsafe',
+    feedback: 'useful',
+    userName: '李敏',
+    diagnostics: sampleScenes[0].diagnostics,
+    answer: buildAnswer({
+      title: '药品包装识别结果',
+      conciseAnswer: '这看起来是一盒感冒类药品，但我建议你再核对说明书或咨询医生。',
+      answerText:
+        '图中较像感冒类药品包装，能看到品牌和成分信息位于正面文字区域，但由于亮度不足，部分小字不够清晰。当前结果适合作为辅助参考，不应替代医生或药师判断。',
+      category: 'ocr',
+      riskLevel: 'high',
+      riskNotice: '涉及药品识别与服用风险，请务必核对药盒说明书、生产批号和医生建议。',
+      spokenText: '这看起来是一盒感冒类药品，但请务必核对药盒说明书。',
+      followUps: ['继续问“适合什么症状？”', '继续问“请高亮药品名称区域”']
+    })
+  },
+  {
+    id: 'rec-102',
+    createdAt: new Date(now - 1000 * 60 * 36).toISOString(),
+    imageLabel: '喷雾瓶',
+    imageHint: '白色瓶身，主体略裁切',
+    question: '这个物品怎么使用？',
+    inputMode: 'text',
+    category: 'usage',
+    status: 'answered',
+    feedback: 'useful',
+    userName: '周航',
+    diagnostics: sampleScenes[1].diagnostics,
+    answer: buildAnswer({
+      title: '物品用途建议',
+      conciseAnswer: '这看起来像一瓶喷雾类日用品，通常需要先摇匀再对准目标区域喷洒。',
+      answerText:
+        '从瓶身轮廓和喷头结构看，图中较像喷雾类日用品。若是清洁或护理用品，通常先阅读标签说明，再保持距离均匀喷洒。由于标签细节未完整展示，具体用途仍需看瓶身文字。',
+      category: 'usage',
+      confidence: 0.85,
+      followUps: ['再问“瓶身上写了什么？”', '再问“需要避开眼睛吗？”']
+    })
+  },
+  {
+    id: 'rec-103',
+    createdAt: new Date(now - 1000 * 60 * 95).toISOString(),
+    imageLabel: '厨房台面',
+    imageHint: '台面清晰，多目标场景',
+    question: '台面上有什么？有危险物品吗？',
+    inputMode: 'text',
+    category: 'scene',
+    status: 'answered',
+    userName: '陈苏',
+    diagnostics: sampleScenes[2].diagnostics,
+    answer: buildAnswer({
+      title: '场景理解结果',
+      conciseAnswer: '台面上能看到刀具、砧板和调料瓶，刀具属于需要注意的危险物品。',
+      answerText:
+        '图像中可见厨房刀具、砧板和数个调料容器，整体场景较整洁。若当前问题是安全确认，最需要注意的是锋利刀具的位置，建议单独摆放并远离台面边缘。',
+      category: 'scene',
+      confidence: 0.92,
+      riskLevel: 'medium',
+      riskNotice: '检测到锋利器具，请在真实场景中再次确认摆放位置与使用环境。'
+    })
+  },
+  {
+    id: 'rec-104',
+    createdAt: new Date(now - 1000 * 60 * 180).toISOString(),
+    imageLabel: '商品包装',
+    imageHint: '图片模糊，文字区域丢失',
+    question: '上面写了什么？',
+    inputMode: 'voice',
+    transcript: '上面写了什么',
+    category: 'ocr',
+    status: 'needs_retry',
+    feedback: 'incorrect',
+    userName: '王晨',
+    diagnostics: {
+      blurScore: 0.41,
+      exposure: 'dim',
+      completeness: 'partial',
+      recommendation: '图像模糊且缺少关键区域，请重新拍摄并靠近文字主体。',
+      tags: ['模糊严重', '文字缺失', '需要重拍']
+    },
+    answer: buildAnswer({
+      title: '当前图像无法确认',
+      conciseAnswer: '这张图片暂时无法准确读取文字，建议重新拍摄。',
+      answerText:
+        '当前图像存在明显模糊和裁切，模型无法稳定定位文字区域，因此不建议输出可能误导的识别结果。请补充更清晰的正面照片后再次提问。',
+      category: 'ocr',
+      confidence: 0.46,
+      riskLevel: 'medium',
+      riskNotice: '低置信度结果已触发重拍提示，当前答案不建议直接采信。',
+      spokenText: '当前图像无法准确读取文字，建议重新拍摄。'
+    })
+  }
+];
+
+export const workbenchData: WorkbenchData = {
+  activeModelName: 'BLIP-2 + OCR Assist',
+  quickPrompts: [
+    '这是什么物品？',
+    '标签上写了什么？',
+    '这个物品怎么使用？',
+    '图中有危险物品吗？',
+    '请描述一下整个场景。'
+  ],
+  sampleScenes,
+  recentRecords: historyRecords.slice(0, 3),
+  featuredAnswer: historyRecords[0].answer,
+  notices: [
+    '药品、症状、危险物品场景统一追加安全提示。',
+    '当前为前端 Mock 模式，真实接口联调时只需要替换 API 层。',
+    '已预留语音识别、语音播报、图像增强和后台统计接口。'
+  ]
+};
+
+export const adminOverview: AdminOverview = {
+  metrics: [
+    {
+      label: '今日问答量',
+      value: '1,284',
+      trend: '+12.4%',
+      note: '比昨天多 142 次提问'
+    },
+    {
+      label: '平均响应时长',
+      value: '1.38s',
+      trend: '-0.26s',
+      note: 'OCR 场景优化后整体更稳定'
+    },
+    {
+      label: '有效反馈率',
+      value: '82%',
+      trend: '+6.1%',
+      note: '“有用”反馈持续上升'
+    },
+    {
+      label: '无法回答占比',
+      value: '9%',
+      trend: '-1.8%',
+      note: '模糊重拍提醒减少误答'
+    }
+  ],
+  categoryStats: [
+    { category: 'ocr', label: '标签读取', count: 420, ratio: 0.33 },
+    { category: 'usage', label: '使用建议', count: 260, ratio: 0.2 },
+    { category: 'scene', label: '场景描述', count: 228, ratio: 0.18 },
+    { category: 'object', label: '物体识别', count: 180, ratio: 0.14 },
+    { category: 'safety', label: '安全提醒', count: 121, ratio: 0.09 },
+    { category: 'count', label: '数量统计', count: 75, ratio: 0.06 }
+  ],
+  riskAlerts: [
+    '药品相关问答命中率较高，建议后端优先接入专业规则库。',
+    '晚间低光照场景的重拍率仍偏高，可增加亮度增强策略。',
+    '危险物品识别建议保留人工审核开关。'
+  ],
+  unresolvedRate: 0.09
+};
+
+export const users: UserProfile[] = [
+  {
+    id: 'user-01',
+    name: '李敏',
+    role: 'admin',
+    status: 'active',
+    lastActiveAt: new Date(now - 1000 * 60 * 5).toISOString(),
+    questionCount: 326,
+    helpfulRate: 0.88
+  },
+  {
+    id: 'user-02',
+    name: '周航',
+    role: 'reviewer',
+    status: 'active',
+    lastActiveAt: new Date(now - 1000 * 60 * 19).toISOString(),
+    questionCount: 214,
+    helpfulRate: 0.84
+  },
+  {
+    id: 'user-03',
+    name: '陈苏',
+    role: 'member',
+    status: 'idle',
+    lastActiveAt: new Date(now - 1000 * 60 * 80).toISOString(),
+    questionCount: 163,
+    helpfulRate: 0.79
+  }
+];
+
+export const models: ModelConfig[] = [
+  {
+    id: 'model-1',
+    name: 'BLIP-2 主模型',
+    provider: 'Local Service',
+    version: 'v1.6.0',
+    endpoint: '/v1/vqa/blip2',
+    enabled: true,
+    latency: '1.2s',
+    strengths: ['通用视觉问答', '图像描述', '多轮追问'],
+    notes: '建议作为默认主模型。'
+  },
+  {
+    id: 'model-2',
+    name: 'OCR Assist',
+    provider: 'Internal OCR',
+    version: 'v0.9.2',
+    endpoint: '/v1/ocr/recognize',
+    enabled: true,
+    latency: '0.7s',
+    strengths: ['标签识别', '说明书文字读取', '关键字段抽取'],
+    notes: '适合药品与包装类场景。'
+  },
+  {
+    id: 'model-3',
+    name: 'Safety Guard',
+    provider: 'Rule Engine',
+    version: 'v0.4.5',
+    endpoint: '/v1/risk/notice',
+    enabled: false,
+    latency: '0.2s',
+    strengths: ['风险规则补充', '高危问答拦截'],
+    notes: '队友接后端后可直接启用。'
+  }
+];
+
+export const logs: SystemLog[] = [
+  {
+    id: 'log-1',
+    time: new Date(now - 1000 * 60 * 2).toISOString(),
+    level: 'INFO',
+    module: 'VQA',
+    message: '完成一条药品识别问答，已追加高风险提示。'
+  },
+  {
+    id: 'log-2',
+    time: new Date(now - 1000 * 60 * 8).toISOString(),
+    level: 'WARN',
+    module: 'Image Preprocess',
+    message: '检测到图像模糊度低于阈值，已触发重拍建议。'
+  },
+  {
+    id: 'log-3',
+    time: new Date(now - 1000 * 60 * 17).toISOString(),
+    level: 'INFO',
+    module: 'ASR',
+    message: '语音问题转写成功，耗时 420ms。'
+  },
+  {
+    id: 'log-4',
+    time: new Date(now - 1000 * 60 * 35).toISOString(),
+    level: 'ERROR',
+    module: 'TTS',
+    message: '播报任务超时，已回退为文本展示。'
+  }
+];
+
+export const safetyRules: SafetyRule[] = [
+  {
+    id: 'rule-1',
+    name: '药品类问答强提醒',
+    scope: '药品识别 / 用法建议',
+    severity: 'high',
+    enabled: true,
+    updatedAt: new Date(now - 1000 * 60 * 18).toISOString()
+  },
+  {
+    id: 'rule-2',
+    name: '刀具与高温场景提示',
+    scope: '厨房 / 危险物品',
+    severity: 'high',
+    enabled: true,
+    updatedAt: new Date(now - 1000 * 60 * 42).toISOString()
+  },
+  {
+    id: 'rule-3',
+    name: '低清晰度重拍引导',
+    scope: '模糊图像',
+    severity: 'medium',
+    enabled: true,
+    updatedAt: new Date(now - 1000 * 60 * 63).toISOString()
+  },
+  {
+    id: 'rule-4',
+    name: '人体接触用品二次确认',
+    scope: '喷雾 / 清洁 / 护理',
+    severity: 'medium',
+    enabled: false,
+    updatedAt: new Date(now - 1000 * 60 * 96).toISOString()
+  }
+];
+
+export const systemSettings: SystemSetting[] = [
+  {
+    id: 'setting-1',
+    label: '默认视觉模型',
+    value: 'BLIP-2 主模型',
+    group: '基础设置',
+    description: '用于常规图像理解与问答。'
+  },
+  {
+    id: 'setting-2',
+    label: 'OCR 服务地址',
+    value: '/v1/ocr/recognize',
+    group: '接口配置',
+    description: '后续由后端替换成真实识别服务。'
+  },
+  {
+    id: 'setting-3',
+    label: '高风险问答审核',
+    value: '开启',
+    group: '安全策略',
+    description: '命中高危规则时保留人工确认入口。'
+  },
+  {
+    id: 'setting-4',
+    label: '日志保留周期',
+    value: '30 天',
+    group: '运行维护',
+    description: '便于排查模型、OCR、语音链路问题。'
+  }
+];
+
+export const adminProfile: AdminProfile = {
+  id: 'admin-01',
+  name: '管理员A',
+  role: 'admin',
+  phone: '138****9000',
+  email: 'admin@visionqa.com',
+  department: '系统管理中心',
+  lastLoginAt: new Date(now - 1000 * 60 * 11).toISOString(),
+  avatarText: 'A'
+};
+
+export function buildMockAnswer(payload: SubmitQuestionPayload): AnswerResult {
+  const question = payload.question.trim();
+  const lowerQuestion = question.toLowerCase();
+  const scene = sampleScenes.find((item) => item.id === payload.sampleSceneId);
+
+  if (lowerQuestion.includes('药') || payload.category === 'ocr') {
+    return buildAnswer({
+      title: '标签读取与药品辅助判断',
+      conciseAnswer: '这更像是一盒药品包装，可以尝试根据正面文字确认名称，但请以说明书和医生建议为准。',
+      answerText:
+        '系统识别到明显的包装文字区域和药盒轮廓，初步判断为药品相关包装。当前可以给出辅助性的名称和用途提示，但涉及服用、剂量和适应症时，必须以说明书、药师或医生意见为准。',
+      category: 'ocr',
+      confidence: 0.86,
+      riskLevel: 'high',
+      riskNotice: '药品识别结果仅供参考，涉及服用场景请务必人工复核。',
+      spokenText: '这更像是一盒药品包装，请以说明书和医生建议为准。',
+      followUps: ['继续问“请读取主要成分”', '继续问“高亮药品名称区域”'],
+      evidence: [
+        {
+          label: '包装正面大标题',
+          confidence: 0.84,
+          reason: '模型在图像中定位到最显眼的文字区域。'
+        },
+        {
+          label: '矩形盒状轮廓',
+          confidence: 0.88,
+          reason: '与药盒类包装外观高度接近。'
+        }
+      ]
+    });
+  }
+
+  if (lowerQuestion.includes('怎么') || lowerQuestion.includes('使用') || payload.category === 'usage') {
+    return buildAnswer({
+      title: '物品用途与操作建议',
+      conciseAnswer: '系统判断这更像是日常用品，建议先确认标签用途，再按说明步骤使用。',
+      answerText:
+        '图像中的主体更接近日常喷雾或瓶装用品，系统可以提供通用的使用建议，例如先查看标签、确认适用对象，再进行喷洒或涂抹操作。若问题涉及人体接触或健康风险，需要进一步核对真实说明。',
+      category: 'usage',
+      confidence: 0.83,
+      riskLevel: 'medium',
+      riskNotice: '当前为通用建议，若涉及人体、药物或危险成分，请再次人工确认。',
+      spokenText: '这更像是日常用品，建议先确认标签用途，再按说明步骤使用。',
+      followUps: ['继续问“这个瓶子可能是什么？”', '继续问“是否需要戴手套？”']
+    });
+  }
+
+  if (lowerQuestion.includes('危险') || payload.category === 'safety') {
+    return buildAnswer({
+      title: '场景安全提醒',
+      conciseAnswer: '图像中存在需要注意的区域，建议优先避开锋利或高温物品。',
+      answerText:
+        '系统识别到场景里存在潜在风险点，例如锋利器具、高温区域或摆放过近的危险物体。当前前端展示会保留安全提醒位，后续接入后端规则服务后可进一步细分风险等级与处理建议。',
+      category: 'safety',
+      confidence: 0.89,
+      riskLevel: 'high',
+      riskNotice: '检测到潜在危险物品，本结果只能提供辅助提醒，不替代现场判断。',
+      spokenText: '图像中存在需要注意的区域，建议优先避开锋利或高温物品。'
+    });
+  }
+
+  return buildAnswer({
+    title: '场景理解与多模态回答',
+    conciseAnswer: scene
+      ? `我看到的主要是“${scene.imageLabel}”相关内容，可以继续围绕细节提问。`
+      : '我已经识别到图像中的主要内容，可以继续追问更具体的问题。',
+    answerText: scene
+      ? `当前场景更适合围绕“${scene.imageLabel}”进行追问，例如识别物体、读取标签、判断风险或给出使用建议。前端已经把答案、置信度、证据高亮和语音播报位都预留好了。`
+      : '系统已完成图像与问题的基础匹配，适合继续追问文字、颜色、数量或操作建议等更具体的问题。',
+    category: payload.category,
+    confidence: 0.9,
+    riskLevel: 'low',
+    riskNotice: '当前结果适合辅助理解场景，必要时请结合更清晰图片继续确认。',
+    spokenText: '我已经识别到图像中的主要内容，可以继续追问更具体的问题。'
+  });
+}
+
+export function cloneMock<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+export function updateRecordFeedback(recordId: string, feedback: FeedbackValue): void {
+  const target = historyRecords.find((item) => item.id === recordId);
+  if (target) {
+    target.feedback = feedback;
+  }
+}

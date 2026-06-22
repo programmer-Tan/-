@@ -1,0 +1,32 @@
+:root {
+  --bg-page: #f4f7fc;
+  --bg-soft: #f8fbff;
+  --panel-bg: rgba(255, 255, 255, 0.9);
+  --card-bg: rgba(255, 255, 255, 0.76);
+  --card-bg-soft: rgba(248, 251, 255, 0.72);
+  --brand-strong: #3269ff;
+  --brand-soft: #5d89ff;
+  --brand-deep: #1f4dd8;
+  --accent-strong: #20c997;
+  --accent-soft: #e8fbf4;
+  --text-main: #1d2740;
+  --text-soft: #44506c;
+  --text-subtle: #7d89a7;
+  --text-muted: #8d97af;
+  --line-soft: rgba(228, 235, 251, 0.58);
+  --line-strong: rgba(215, 224, 244, 0.72);
+  --card-border: rgba(228, 235, 251, 0.32);
+  --success: #20c997;
+  --warning: #ff8d52;
+  --danger-soft: #fff1ec;
+  --shadow-soft: 0 16px 34px rgba(34, 56, 101, 0.05);
+  --shadow-sm: 0 8px 18px rgba(34, 56, 101, 0.045);
+  font-family:
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    "Segoe UI",
+    sans-serif;
+  color: var(--text-main);
+  background: var(--bg-page);
+}

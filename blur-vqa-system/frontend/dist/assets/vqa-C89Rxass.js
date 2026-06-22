@@ -1,0 +1,1 @@
+import{u as a,b as n,c as s,h as c,w as i}from"./mockData-QLpi-jqw.js";function r(e,t=420){return new Promise(o=>{window.setTimeout(()=>o(e),t)})}const d={async getWorkbenchData(){return r(s(i),280)},async getHistoryRecords(){return r(s(c),360)},async submitQuestion(e){return r(n(e),720)},async submitFeedback(e,t){return a(e,t),r(void 0,180)}};export{d as v};
